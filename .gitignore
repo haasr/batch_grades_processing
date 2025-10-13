@@ -1,0 +1,7 @@
+.venv
+.env
+.ipynb_checkpoints
+grades.db
+downloads/*
+*.csv
+*pyc*
