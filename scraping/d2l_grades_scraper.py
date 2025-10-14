@@ -44,8 +44,6 @@ class D2LGradesScraper:
         if headless: self.options.add_argument('--headless')
 
         # Make browser appear more human-like
-        self.options.set_preference("general.useragent.override",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0")
         self.options.set_preference("dom.webdriver.enabled", False)
         self.options.set_preference("useAutomationExtension", False)
         self.options.set_preference("navigator.webdriver", False)
