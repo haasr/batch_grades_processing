@@ -134,8 +134,11 @@ class StudentGrade(Base):
 
     def calculate_overall_grades(self):
         """
-        Calculate and update overall grades based on current component scores.
-        Returns tuple: (pre_final_grade, post_final_grade)
+        Calculate pre-final and post-final overall grades.
+
+        Post-final calculation:
+        - If DCA graded (even if 0): (pre_final + dca_score) / 2
+        - If DCA not graded yet: pre_final / 2 (shows penalty for non-submission)
         """
         components = []
         if self.lab_average is not None:
@@ -144,33 +147,44 @@ class StudentGrade(Base):
             components.append(self.quizzes_average)
         if self.exit_tickets_average is not None:
             components.append(self.exit_tickets_average)
-        
-        # Calculate pre-final grade
+
+        # Pre-final: average of available components
         if len(components) > 0:
             self.overall_grade_pre_final = sum(components) / 3
         else:
             self.overall_grade_pre_final = None
-        
-        # Calculate post-final grade (only if dca_score > 0)
-        if self.overall_grade_pre_final is not None and self.dca_score and self.dca_score > 0:
-            self.overall_grade_post_final = (self.overall_grade_pre_final + self.dca_score) / 2
+
+        # Post-final: always calculated to show potential/actual final grade
+        if self.overall_grade_pre_final is not None:
+            if self.dca_score is not None:
+                # DCA graded: actual final grade
+                self.overall_grade_post_final = (
+                    self.overall_grade_pre_final + self.dca_score
+                ) / 2
+            else:
+                # DCA not graded: shows what grade would be without DCA
+                self.overall_grade_post_final = self.overall_grade_pre_final / 2
         else:
             self.overall_grade_post_final = None
-        
+
         return self.overall_grade_pre_final, self.overall_grade_post_final
-    
+
     @property
-    def current_grade(self):
-        """Returns the appropriate grade: post-final if available, otherwise pre-final"""
-        if self.overall_grade_post_final is not None:
-            return self.overall_grade_post_final
+    def overall_grade_pre_final(self):
+        """Returns the appropriate grade: pre-final-project overall grade"""
         return self.overall_grade_pre_final
     
+    @property
+    def overall_grade_pre_final(self):
+        """Returns the appropriate grade: post-final-project overall grade"""
+        return self.overall_grade_post_final
+
     @property
     def has_final_project(self):
         """Check if final project has been submitted (dca_score > 0)"""
         return self.dca_score is not None and self.dca_score > 0
     
     def __repr__(self):
-        grade_str = f"{self.current_grade:.2f}%" if self.current_grade else "N/A"
-        return f"<StudentGrade {self.student_id} - {self.semester} - {grade_str}>"
+        grade_str = f"\n - Pre-Final Grade:  {self.overall_grade_pre_final:.2f}%" if self.overall_grade_pre_final else "\n - Pre-Final Grade:  N/A"
+        grade_str += f"\n - Post-Final Grade: {self.overall_grade_post_final:.2f}%" if self.overall_grade_post_final else "\n - Post-Final Grade: N/A"
+        return f"<StudentGrade {self.student_id} - {self.semester}:{grade_str}>"

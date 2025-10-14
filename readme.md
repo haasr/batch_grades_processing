@@ -159,7 +159,7 @@ batch_grades/
 ┌─────────────────┐     │         ┌─────────────────┐
 │    Course       │     │         │ GradeSnapshot   │
 ├─────────────────┤     │         ├─────────────────┤
-│ ou (PK)         │◄────┼─────────┤ id              │
+│ ou (PK)         │◄───┼─────────┤ id              │
 │ course_name     │     │         │ student_id (FK) │
 │ course_type     │     │         │ course_ou (FK)  │
 │ section         │     │         │ snapshot_date   │
