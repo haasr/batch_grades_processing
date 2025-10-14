@@ -174,16 +174,6 @@ class StudentGrade(Base):
         """Returns the appropriate grade: pre-final-project overall grade"""
         return self.overall_grade_pre_final
     
-    @property
-    def overall_grade_pre_final(self):
-        """Returns the appropriate grade: post-final-project overall grade"""
-        return self.overall_grade_post_final
-
-    @property
-    def has_final_project(self):
-        """Check if final project has been submitted (dca_score > 0)"""
-        return self.dca_score is not None and self.dca_score > 0
-    
     def __repr__(self):
         grade_str = f"\n - Pre-Final Grade:  {self.overall_grade_pre_final:.2f}%" if self.overall_grade_pre_final else "\n - Pre-Final Grade:  N/A"
         grade_str += f"\n - Post-Final Grade: {self.overall_grade_post_final:.2f}%" if self.overall_grade_post_final else "\n - Post-Final Grade: N/A"
