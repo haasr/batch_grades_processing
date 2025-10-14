@@ -2,6 +2,8 @@
 .env
 .ipynb_checkpoints
 grades.db
-downloads/*
+scraping/downloads/*
+scraping/logs/*
 *.csv
 *pyc*
+
