@@ -364,7 +364,7 @@ class D2LGradesScraper:
     def close(self):
         """Close the browser and cleanup the files used"""
         if self.delete_downloads_on_completion:
-            [ os.remove(self.downloads_dir / filename) for filename in self.files_to_delete ]
+            [ (self.downloads_dir / f).unlink(missing_ok=True) for f in self.files_to_delete ]
 
         if self.driver:
             self.driver.quit()

@@ -192,9 +192,9 @@ class LectureGradesScraper(D2LGradesScraper):
                     else:
                         quizzes_subtotal_denominator_idx = i
                 elif "last" in colname: # don't check for "name" since it is in username
-                    first_name_idx = i
-                elif "first" in colname:
                     last_name_idx = i
+                elif "first" in colname:
+                    first_name_idx = i
 
             df = df.rename(columns={
                 cols[last_name_idx]: "Last_Name",
@@ -252,13 +252,16 @@ class LectureGradesScraper(D2LGradesScraper):
 
     def save_grades_to_db(self, semester: str = None):
         """Save lecture grades (quizzes and exit tickets) to database after scraping."""
-        db = get_db()
         if not semester:
             semester = CURRENT_SEMESTER
 
-        try:
-            for course_ou, df in self.grades_dataframes_map.items():
-                self.logger.info(f"Saving {len(df)} lecture records for {course_ou}")
+        for course_ou, df in self.grades_dataframes_map.items():
+            self.logger.info(f"Saving {len(df)} lecture records for {course_ou}")
+
+            # ← CRITICAL: Get fresh DB connection for EACH SECTION
+            db = get_db()
+
+            try:
                 course_split = course_ou.split("_")
                 course_name = course_split[0]
                 ou = course_split[1]
@@ -267,76 +270,105 @@ class LectureGradesScraper(D2LGradesScraper):
                 course_name = f"{course_name_split[0]}-{course_name_split[1]}"
                 section = course_name_split[2]
 
+                # Get or create course
                 course = db.query(Course).filter_by(ou=ou).first()
                 if not course:
                     course = Course(
                         ou=ou,
                         course_name=course_name,
-                        course_type='LAB',
+                        course_type='LECTURE',
                         section=section,
                         semester=semester
                     )
                     db.add(course)
-                    db.flush()
+                    db.commit()
+                    self.logger.info(f"Created course: {course_name}-{section} (OU: {ou})")
+                else:
+                    self.logger.info(f"Found existing course: {course_name}-{section} (OU: {ou})")
 
-                for row in df.itertuples(index=False):
-                    org_id = str(row.OrgDefinedId)
+                # Process all students in this section
+                for idx, row in enumerate(df.itertuples(index=False)):
+                    try:
+                        org_id = str(row.OrgDefinedId)
 
-                    # Get or create student
-                    student = db.query(Student).filter_by(org_defined_id=org_id).first()
-                    if not student:
-                        student = Student(
-                            org_defined_id=org_id,
-                            username=str(row.Username),
-                            email=str(row.Email),
-                            last_name=str(row.Last_Name),   # NOTE: Column names with spaces must be written with underscore
-                            first_name=str(row.First_Name),
+                        # Get or create student
+                        student = db.query(Student).filter_by(org_defined_id=org_id).first()
+                        if not student:
+                            student = Student(
+                                org_defined_id=org_id,
+                                username=str(row.Username),
+                                email=str(row.Email),
+                                last_name=str(row.Last_Name),
+                                first_name=str(row.First_Name),
+                            )
+                            db.add(student)
+                            db.flush()
+
+                        # Create snapshot
+                        snapshot = GradeSnapshot(
+                            student_id=org_id,
+                            course_ou=ou,
+                            quizzes_numerator=float(row.quizzes_numerator) if not pd.isna(row.quizzes_numerator) else 0.0,
+                            quizzes_denominator=float(row.quizzes_denominator) if not pd.isna(row.quizzes_denominator) else 0.0,
+                            quizzes_average=float(row.quizzes_average) if not pd.isna(row.quizzes_average) else 0.0,
+                            exit_tickets_numerator=float(row.exit_tickets_numerator) if not pd.isna(row.exit_tickets_numerator) else 0.0,
+                            exit_tickets_denominator=float(row.exit_tickets_denominator) if not pd.isna(row.exit_tickets_denominator) else 0.0,
+                            exit_tickets_average=float(row.exit_tickets_average) if not pd.isna(row.exit_tickets_average) else 0.0,
                         )
-                        db.add(student)
-                        db.flush()
+                        db.add(snapshot)
 
-                    # Create snapshot
-                    snapshot = GradeSnapshot(
-                        student_id=org_id,
-                        course_ou=ou,
-                        quizzes_numerator=float(row.quizzes_numerator) if not pd.isna(row.quizzes_numerator) else 0.0,
-                        quizzes_denominator=float(row.quizzes_denominator) if not pd.isna(row.quizzes_denominator) else 0.0,
-                        quizzes_average=float(row.quizzes_average) if not pd.isna(row.quizzes_average) else 0.0,
-                        exit_tickets_numerator=float(row.exit_tickets_numerator) if not pd.isna(row.exit_tickets_numerator) else 0.0,
-                        exit_tickets_denominator=float(row.exit_tickets_denominator) if not pd.isna(row.exit_tickets_denominator) else 0.0,
-                        exit_tickets_average=float(row.exit_tickets_average) if not pd.isna(row.exit_tickets_average) else 0.0,
-                    )
-                    db.add(snapshot)
-
-                    # Update or create StudentGrade
-                    student_grade = db.query(StudentGrade).filter_by(
-                        student_id=org_id,
-                        semester=semester,
-                    ).first()
-
-                    if not student_grade:
-                        student_grade = StudentGrade(
+                        # Update or create StudentGrade
+                        student_grade = db.query(StudentGrade).filter_by(
                             student_id=org_id,
                             semester=semester
-                        )
-                        db.add(student_grade)
+                        ).first()
 
-                    # Update lecture fields
-                    student_grade.lecture_course = course
-                    student_grade.quizzes_numerator = float(row.quizzes_numerator) if not pd.isna(row.quizzes_numerator) else 0.0
-                    student_grade.quizzes_denominator = float(row.quizzes_denominator) if not pd.isna(row.quizzes_denominator) else 0.0
-                    student_grade.quizzes_average = float(row.quizzes_average) if not pd.isna(row.quizzes_average) else 0.0
-                    student_grade.exit_tickets_numerator = float(row.exit_tickets_numerator) if not pd.isna(row.exit_tickets_numerator) else 0.0
-                    student_grade.exit_tickets_denominator = float(row.exit_tickets_denominator) if not pd.isna(row.exit_tickets_denominator) else 0.0
-                    student_grade.exit_tickets_average = float(row.exit_tickets_average) if not pd.isna(row.exit_tickets_average) else 0.0
+                        if not student_grade:
+                            student_grade = StudentGrade(
+                                student_id=org_id,
+                                semester=semester
+                            )
+                            db.add(student_grade)
+                            db.flush()
 
-                    # Recalculate overall grades
-                    student_grade.calculate_overall_grades()
+                        # Update lecture fields
+                        student_grade.lecture_course = course
+                        student_grade.lecture_course_ou = ou
+                        student_grade.quizzes_numerator = float(row.quizzes_numerator) if not pd.isna(row.quizzes_numerator) else 0.0
+                        student_grade.quizzes_denominator = float(row.quizzes_denominator) if not pd.isna(row.quizzes_denominator) else 0.0
+                        student_grade.quizzes_average = float(row.quizzes_average) if not pd.isna(row.quizzes_average) else 0.0
+                        student_grade.exit_tickets_numerator = float(row.exit_tickets_numerator) if not pd.isna(row.exit_tickets_numerator) else 0.0
+                        student_grade.exit_tickets_denominator = float(row.exit_tickets_denominator) if not pd.isna(row.exit_tickets_denominator) else 0.0
+                        student_grade.exit_tickets_average = float(row.exit_tickets_average) if not pd.isna(row.exit_tickets_average) else 0.0
+
+                        # Flush before calculating
+                        db.flush()
+
+                        # Recalculate overall grades
+                        student_grade.calculate_overall_grades()
+
+                        if (idx + 1) % 50 == 0:
+                            self.logger.info(f"  Processed {idx + 1}/{len(df)} students...")
+
+                    except Exception as e:
+                        # Don't rollback - just log and continue
+                        self.logger.error(f"Error processing student {org_id}: {str(e)}")
+                        continue
+
+                # Commit entire section at once
                 db.commit()
                 self.logger.info(f"Successfully saved {course_name} lecture grades")
-        except Exception as e:
-            db.rollback()
-            self.logger.error(f"Error saving to database: {str(e)}")
-            raise
-        finally:
-            db.close()
+
+            except Exception as e:
+                db.rollback()
+                self.logger.error(f"Error saving section {course_ou}: {str(e)}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                # Continue with next section instead of raising
+                continue
+
+            finally:
+                # ← CRITICAL: Close connection after EACH SECTION
+                db.close()
+
+        self.logger.info("All lecture grades saved successfully")

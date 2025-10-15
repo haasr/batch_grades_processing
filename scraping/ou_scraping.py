@@ -38,17 +38,19 @@ class OUScraper:
         self.ou_map = {}
 
         self.worker_id = os.getpid()
-        self.logger = self.setup_worker_logger()
-
         self.logging_dir = CURRENT_DIR / 'logs'
-        os.makedirs(self.logging_dir, exist_ok=True)
+        # Added these as required params so I don't forget that the order matters
+        # (e.g., first assign worker id and logging dir to self)
+        self.logger = self.setup_worker_logger(self.logging_dir, self.worker_id)
 
         self.options = Options()
         if headless: self.options.add_argument('--headless')
 
-    def setup_worker_logger(self):
+    def setup_worker_logger(self, logging_dir: Path, worker_id: int):
         """Set up a logger for a specific worker"""
-        logger = logging.getLogger(f'OUScraper_{self.worker_id}')
+        os.makedirs(logging_dir, exist_ok=True)
+
+        logger = logging.getLogger(f'OUScraper_{worker_id}')
         logger.setLevel(logging.INFO)
 
         # Prevent duplicate handlers
@@ -56,7 +58,7 @@ class OUScraper:
             logger.handlers.clear()
 
         timestamp = dt.now().strftime("%m-%d-%Y_%H-%M")
-        log_file = self.logging_dir / f'ou_{timestamp}_{self.worker_id}.log'
+        log_file = logging_dir / f'ou_{timestamp}_{self.worker_id}.log'
 
         # File handler
         file_handler = logging.FileHandler(log_file)

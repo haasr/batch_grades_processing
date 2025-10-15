@@ -1,0 +1,5 @@
+# From project root
+python -m database.init_db
+
+# To drop and recreate (CAUTION!)
+python -m database.init_db --drop

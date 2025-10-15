@@ -1,9 +1,7 @@
 .venv
 .env
 .ipynb_checkpoints
-grades.db
 scraping/downloads/*
 scraping/logs/*
 *.csv
 *pyc*
-

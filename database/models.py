@@ -9,9 +9,14 @@ import uuid
 
 def get_current_semester():
     now = datetime.now()
-    if now.month < 5: semester = '10'
-    elif (now.month > 7 and now.day > 15): semester = '80'
-    else: semester = '50'
+    if now.month < 5:           # Jan-Apr → Spring (10)
+        semester = '10'
+    elif now.month > 8:         # Sep-Dec → Fall (80)
+        semester = '80'
+    elif (now.month == 8 and now.day > 15):  # Late Aug → Fall (80)
+        semester = '80'
+    else:                       # May-mid Aug → Summer (50)
+        semester = '50'
     return f"{now.year}{semester}"
 
 class Student(Base):
@@ -140,40 +145,25 @@ class StudentGrade(Base):
         - If DCA graded (even if 0): (pre_final + dca_score) / 2
         - If DCA not graded yet: pre_final / 2 (shows penalty for non-submission)
         """
-        components = []
-        if self.lab_average is not None:
-            components.append(self.lab_average)
-        if self.quizzes_average is not None:
-            components.append(self.quizzes_average)
-        if self.exit_tickets_average is not None:
-            components.append(self.exit_tickets_average)
+        lab = self.lab_average or 0.0
+        quiz = self.quizzes_average or 0.0
+        exit_ticket = self.exit_tickets_average or 0.0
+        dca = self.dca_score or 0.0
 
-        # Pre-final: average of available components
-        if len(components) > 0:
-            self.overall_grade_pre_final = sum(components) / 3
-        else:
-            self.overall_grade_pre_final = None
+        # Pre-final: average of lab, quizzes, and exit tickets (equal weight: 1/3 each)
+        self.overall_grade_pre_final = (lab + quiz + exit_ticket) / 3
 
-        # Post-final: always calculated to show potential/actual final grade
-        if self.overall_grade_pre_final is not None:
-            if self.dca_score is not None:
-                # DCA graded: actual final grade
-                self.overall_grade_post_final = (
-                    self.overall_grade_pre_final + self.dca_score
-                ) / 2
-            else:
-                # DCA not graded: shows what grade would be without DCA
-                self.overall_grade_post_final = self.overall_grade_pre_final / 2
-        else:
-            self.overall_grade_post_final = None
+        # Post-final: average of pre-final grade and DCA (equal weight: 50% each)
+        self.overall_grade_post_final = (self.overall_grade_pre_final + dca) / 2
+
 
         return self.overall_grade_pre_final, self.overall_grade_post_final
 
     @property
-    def overall_grade_pre_final(self):
-        """Returns the appropriate grade: pre-final-project overall grade"""
-        return self.overall_grade_pre_final
-    
+    def has_final_project(self):
+        """Check if final project has been submitted (dca_score > 0)"""
+        return self.dca_score is not None and self.dca_score > 0
+
     def __repr__(self):
         grade_str = f"\n - Pre-Final Grade:  {self.overall_grade_pre_final:.2f}%" if self.overall_grade_pre_final else "\n - Pre-Final Grade:  N/A"
         grade_str += f"\n - Post-Final Grade: {self.overall_grade_post_final:.2f}%" if self.overall_grade_post_final else "\n - Post-Final Grade: N/A"
