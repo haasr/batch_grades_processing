@@ -1,0 +1,1 @@
+If I make a tkinter GUI, the textarea for console output needs to be about 970px wide by 480px high
